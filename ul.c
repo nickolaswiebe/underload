@@ -1,11 +1,5 @@
 #include <stdio.h>
 #include <unistd.h>
-typedef union node Node;
-union node {
-	type
-	void(*func)();
-	
-};
 struct node {
 	unsigned int refs;
 	struct node *head, *tail;
