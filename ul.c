@@ -1,158 +1,72 @@
-#include <stdio.h>
-#include <unistd.h>
-typedef union node Node;
-union node {
-	type
-	void(*func)();
-	
-};
+#include <stdlib.h>
 struct node {
+	void(*func)(void);
 	unsigned int refs;
 	struct node *head, *tail;
 };
-struct node *unused = NULL;
-struct node *alloc() {
-	if(unused == NULL)
-		return sbrk(sizeof(struct node));
-	struct node *ret = unused;
-	unused = unused->tail;
+struct node *nalloc() {
+	return malloc(sizeof(struct node));
+}
+void nfree(struct node *node) {
+	free(node);
+}
+struct node *nnode(struct node *head,struct node *tail) {
+	struct node *ret = nalloc();
+	ret->refs = 1;
+	ret->head = head;
+	ret->tail = tail;
 	return ret;
 }
-void dalloc(struct node *node) {
-	node->tail = unused;
-	unused = node;
-}
-struct node *mknode(struct node *head,struct node *tail) {
-	struct node *new = alloc();
-	new->refs = 1;
-	new->head = head;
-	new->tail = tail;
-	return new;
-}
 struct node *ndup(struct node *node) {
-	node->refs++;
+	if(node->head != NULL)
+		node->refs++;
 	return node;
 }
-void drop(struct node *node) {
-	if(node == NULL)
-		return;
-	node->refs--;
-	if(node->refs > 0)
-		return;
-	drop(node->head);
-	drop(node->tail);
+void ndrop(struct node *node) {
+	if(node == NULL) return;
+	if(node->head == NULL) return;
+	if(--node->refs > 0) return;
+	ndrop(node->head);
+	ndrop(node->tail);
+	nfree(node);
 }
-#define SYM(NAME) struct node s_##NAME; struct node *NAME = &s_##NAME;
-SYM(DUP) SYM(DROP) SYM(SWAP) SYM(CAT) SYM(QUOTE) SYM(RUN) SYM(RET) SYM(OUT) SYM(NL)
+#define nhead(N) ((N)->head)
+#define ntail(N) ((N)->tail)
+#define nfunc(N) ((N)->func)
 void push(struct node **st,struct node *val) {
-	*st = mknode(val,*st);
+	*st = nnode(val,*st);
 }
 struct node *pop(struct node **st) {
-	struct node *ret = (*st)->head;
-	struct node *new = (*st)->tail;
-	dalloc(*st);
+	struct node *ret = nhead(*st);
+	struct node *new = ntail(*st);
+	nfree(*st);
 	*st = new;
 	return ret;
 }
-struct node *st = NULL, *rs = NULL;
-void print(struct node *node) {
-	if(node == DUP) {
-		putchar(':');
-	} else if(node == DROP) {
-		putchar('!');
-	} else if(node == SWAP) {
-		putchar('~');
-	} else if(node == CAT) {
-		putchar('*');
-	} else if(node == QUOTE) {
-		putchar('a');
-	} else if(node == RUN) {
-		putchar('^');
-	} else if(node == NL) {
-		putchar('n');
-	} else if(node == OUT) {
-		putchar('S');
-	} else if(node != NULL && node != RET) {
-		if(node->tail == NULL) {
-			putchar('(');
-			print(node->head);
-			putchar(')');
-		} else {
-			print(node->head);
-			print(node->tail);
-		}
-	}
-}
-struct node *ip, *a, *b;
-void go() {
-	for(;;) {
-		if(ip == DUP) {
-			a = pop(&st);
-			push(&st,a);
-			push(&st,ndup(a));
-			ip = RET;
-		} else if(ip == DROP) {
-			drop(pop(&st));
-			ip = RET;
-		} else if(ip == SWAP) {
-			a = pop(&st);
-			b = pop(&st);
-			push(&st,a);
-			push(&st,b);
-			ip = RET;
-		} else if(ip == CAT) {
-			b = pop(&st);
-			a = pop(&st);
-			push(&st,mknode(a,b));
-			ip = RET;
-		} else if(ip == QUOTE) {
-			a = pop(&st);
-			push(&st,mknode(a,NULL));
-			ip = RET;
-		} else if(ip == RUN) {
-			ip = pop(&st);
-		} else if(ip == RET) {
-			if(rs == NULL)
-				return;
-			ip = pop(&rs);
-		} else {
-			if(ip->tail == NULL) { // PUSH
-				push(&st,ip->head);
-				drop(ip);
-				ip = RET;
-			} else { // NODE
-				a = ip;
-				if(ip->tail != RET)
-					push(&rs,ip->tail);
-				ip = ip->head;
-				drop(a);
+struct node *a,*b,*ip,*st,*rs;
+void dup() { a = pop(&st); push(&st,a); push(&st,ndup(a)); }
+void drop() { ndrop(pop(&st)); }
+void swap() { a = pop(&st); b = pop(&st); push(&st,a); push(&st,b); }
+void cat() { b = pop(&st); a = pop(&st); push(&st,nnode(a,b)); }
+void quote() { a = pop(&st); push(&st,nnode(a,NULL)); }
+void run() { ip = pop(&st); }
+void ret() { ip = pop(&rs); }
+void done() { }
+void vm() {
+	//push(&st,odone);
+	for(;;)
+		if(ntail(ip) == NULL) {
+			if(nhead(ip) == NULL) {
+				(*nfunc(ip))();
+			} else {
+				push(&st,nhead(ip));
+				ndrop(ip);
 			}
+		} else {
+			push(&rs,ntail(ip));
+			a = ip;
+			ip = nhead(ip);
+			ndrop(a);
 		}
-	}
 }
-struct node *parse() {
-	switch(getchar()) {
-		case '(': ;
-			struct node *inner = parse();
-			return mknode(mknode(inner,NULL),parse());
-		case ')': case EOF: return RET;
-		case ':': return mknode(DUP,parse());
-		case '!': return mknode(DROP,parse());
-		case '~': return mknode(SWAP,parse());
-		case '*': return mknode(CAT,parse());
-		case 'a': return mknode(QUOTE,parse());
-		case '^': return mknode(RUN,parse());
-		default: return parse();
-	}
-}
-int main() {
-	ip = parse();
-	go();
-	while(st != NULL)
-		push(&rs,pop(&st));
-	while(rs != NULL) {
-		putchar('(');
-		print(pop(&rs));
-		putchar(')');
-	}
-}
+int main(){}
