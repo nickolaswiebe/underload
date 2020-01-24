@@ -1,72 +1,170 @@
 #include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#define dup dup_lol
+typedef void func();
 struct node {
-	void(*func)(void);
+	func *op;
 	unsigned int refs;
 	struct node *head, *tail;
 };
-struct node *nalloc() {
-	return malloc(sizeof(struct node));
+// fast brk allocator
+#define BRK_SIZE (4096)
+struct node *brk_alloc() {
+	static int pos = 0; // 1 AFTER position to be returned
+	static struct node *buf;
+	if(pos == 0) {
+		buf = sbrk(BRK_SIZE * sizeof(struct node));
+		pos = BRK_SIZE;
+	}
+	return &buf[--pos];
 }
-void nfree(struct node *node) {
-	free(node);
-}
-struct node *nnode(struct node *head,struct node *tail) {
-	struct node *ret = nalloc();
-	ret->refs = 1;
-	ret->head = head;
-	ret->tail = tail;
+// memory manager
+struct node *free_list = NULL;
+struct node *new() {
+	if(free_list == NULL)
+		return brk_alloc();
+	struct node *ret = free_list;
+	free_list = free_list->head;
 	return ret;
 }
-struct node *ndup(struct node *node) {
-	if(node->head != NULL)
-		node->refs++;
+void delete(struct node *node) {
+	node->head = free_list;
+	free_list = node;
+}
+// garbage collector
+struct node *node_new(func *op,struct node *head,struct node *tail) {
+	struct node *node = new();
+	node->op = op;
+	node->head = head;
+	node->tail = tail;
+	node->refs = 1;
 	return node;
 }
-void ndrop(struct node *node) {
-	if(node == NULL) return;
-	if(node->head == NULL) return;
-	if(--node->refs > 0) return;
-	ndrop(node->head);
-	ndrop(node->tail);
-	nfree(node);
+void node_free(struct node *node) {
+	if(node == NULL || --node->refs > 0)
+		return;
+	node_free(node->head);
+	node_free(node->tail);
+	delete(node);
 }
-#define nhead(N) ((N)->head)
-#define ntail(N) ((N)->tail)
-#define nfunc(N) ((N)->func)
-void push(struct node **st,struct node *val) {
-	*st = nnode(val,*st);
+struct node *node_dup(struct node *node) {
+	node->refs++;
+	return node;
+}
+// generic stack operations
+void push(struct node **st,struct node *item) {
+	*st = node_new(NULL,item,*st);
 }
 struct node *pop(struct node **st) {
-	struct node *ret = nhead(*st);
-	struct node *new = ntail(*st);
-	nfree(*st);
-	*st = new;
+	struct node *ret = (*st)->head;
+	struct node *old = *st;
+	*st = (*st)->tail;
+	delete(old);
 	return ret;
 }
-struct node *a,*b,*ip,*st,*rs;
-void dup() { a = pop(&st); push(&st,a); push(&st,ndup(a)); }
-void drop() { ndrop(pop(&st)); }
-void swap() { a = pop(&st); b = pop(&st); push(&st,a); push(&st,b); }
-void cat() { b = pop(&st); a = pop(&st); push(&st,nnode(a,b)); }
-void quote() { a = pop(&st); push(&st,nnode(a,NULL)); }
-void run() { ip = pop(&st); }
-void ret() { ip = pop(&rs); }
-void done() { }
-void vm() {
-	//push(&st,odone);
-	for(;;)
-		if(ntail(ip) == NULL) {
-			if(nhead(ip) == NULL) {
-				(*nfunc(ip))();
-			} else {
-				push(&st,nhead(ip));
-				ndrop(ip);
-			}
-		} else {
-			push(&rs,ntail(ip));
-			a = ip;
-			ip = nhead(ip);
-			ndrop(a);
-		}
+// virtual machine
+struct node *rs, *st, *ip;
+void op_ret() {
+	ip = pop(&rs);
 }
-int main(){}
+void op_push() {
+	push(&st,node_dup(ip->head));
+	node_free(ip);
+	op_ret();
+}
+void op_node() {
+	push(&rs,node_dup(ip->tail));
+	push(&rs,node_dup(ip->head));
+	node_free(ip);
+	op_ret();
+}
+void op_run() {
+	push(&rs,pop(&st));
+	op_ret();
+}
+void op_dup() {
+	struct node *t = pop(&st);
+	push(&st,t);
+	push(&st,node_dup(t));
+	op_ret();
+}
+void op_drop() {
+	node_free(pop(&st));
+	op_ret();
+}
+void op_swap() {
+	struct node *b = pop(&st);
+	struct node *a = pop(&st);
+	push(&st,b);
+	push(&st,a);
+	op_ret();
+}
+void op_cat() {
+	struct node *b = pop(&st);
+	struct node *a = pop(&st);
+	push(&st,node_new(&op_node,a,b));
+	op_ret();
+}
+void op_quote() {
+	push(&st,node_new(&op_push,pop(&st),NULL));
+	op_ret();
+}
+#define PRINT_CHAR(C,F) else if(node->op == &op_##F) putchar(C);
+void print(struct node *node) {
+	if(node->op == &op_node) {
+		print(node->head);
+		print(node->tail);
+	} else if(node->op == &op_push) {
+		putchar('(');
+		print(node->head);
+		putchar(')');
+	}
+	PRINT_CHAR(':',dup)
+	PRINT_CHAR('!',drop)
+	PRINT_CHAR('~',swap)
+	PRINT_CHAR('*',cat)
+	PRINT_CHAR('a',quote)
+	PRINT_CHAR('^',run)
+}
+
+void done() {
+	while(st != NULL)
+		push(&rs,pop(&st));
+	while(rs != NULL) {
+		putchar('(');
+		print(pop(&rs));
+		putchar(')');
+	}
+	exit(0);
+}
+void vm() {
+	rs = st = NULL;
+	push(&rs,node_new(&done,NULL,NULL));
+	for(;;)
+		ip->op();
+}
+#define PARSE_CHAR(C,F) case C: return node_new(&op_node,node_new(&op_##F,NULL,NULL),parse());
+struct node *parse() {
+	switch(getchar()) {
+		case '(': ;
+			struct node *inner = parse();
+			return node_new(&op_node,node_new(&op_push,inner,NULL),parse());
+		case ')':
+		case EOF:
+			return node_new(&op_ret,NULL,NULL);
+		PARSE_CHAR(':',dup)
+		PARSE_CHAR('!',drop)
+		PARSE_CHAR('~',swap)
+		PARSE_CHAR('*',cat)
+		PARSE_CHAR('a',quote)
+		PARSE_CHAR('^',run)
+		default:
+			return parse();
+	}
+}
+int main() {
+	ip = parse();
+	vm();
+	return 0;
+}
