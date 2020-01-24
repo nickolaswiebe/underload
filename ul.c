@@ -66,49 +66,40 @@ struct node *pop(struct node **st) {
 // virtual machine
 struct node *rs, *st, *ip;
 void op_ret() {
-	ip = pop(&rs);
 }
 void op_push() {
 	push(&st,node_dup(ip->head));
 	node_free(ip);
-	op_ret();
 }
 void op_node() {
 	push(&rs,node_dup(ip->tail));
 	push(&rs,node_dup(ip->head));
 	node_free(ip);
-	op_ret();
 }
 void op_run() {
 	push(&rs,pop(&st));
-	op_ret();
 }
 void op_dup() {
 	struct node *t = pop(&st);
 	push(&st,t);
 	push(&st,node_dup(t));
-	op_ret();
 }
 void op_drop() {
 	node_free(pop(&st));
-	op_ret();
 }
 void op_swap() {
 	struct node *b = pop(&st);
 	struct node *a = pop(&st);
 	push(&st,b);
 	push(&st,a);
-	op_ret();
 }
 void op_cat() {
 	struct node *b = pop(&st);
 	struct node *a = pop(&st);
 	push(&st,node_new(&op_node,a,b));
-	op_ret();
 }
 void op_quote() {
 	push(&st,node_new(&op_push,pop(&st),NULL));
-	op_ret();
 }
 #define PRINT_CHAR(C,F) else if(node->op == &op_##F) putchar(C);
 void print(struct node *node) {
@@ -138,11 +129,14 @@ void done() {
 	}
 	exit(0);
 }
-void vm() {
+void vm(struct node *prog) {
 	rs = st = NULL;
 	push(&rs,node_new(&done,NULL,NULL));
-	for(;;)
+	push(&rs,prog);
+	for(;;) {
+		ip = pop(&rs);
 		ip->op();
+	}
 }
 #define PARSE_CHAR(C,F) case C: return node_new(&op_node,node_new(&op_##F,NULL,NULL),parse());
 struct node *parse() {
@@ -164,7 +158,6 @@ struct node *parse() {
 	}
 }
 int main() {
-	ip = parse();
-	vm();
+	vm(parse());
 	return 0;
 }
