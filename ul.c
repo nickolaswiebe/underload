@@ -120,20 +120,31 @@ void op_quote() {
 // PRINT_CHAR('c',func) means that func should be printed as 'c'
 #define PRINT_CHAR(C,F) else if(node->op == &op_##F) putchar(C);
 void print(struct node *node) {
-	if(node->op == &op_node) {
-		print(node->head);
-		print(node->tail);
-	} else if(node->op == &op_push) {
-		putchar('(');
-		print(node->head);
-		putchar(')');
+	 // print stack represents nodes we still need to print, and starts with the input node
+	// same principle of taking a node tree apart as the main vm
+	struct node *pst = NULL;
+	push(&pst,node);
+	
+	while(pst != NULL) {
+		node = pop(&pst);
+		
+		if(node == NULL) { // NULL represents the end of a push op
+			putchar(')');
+		} else if(node->op == &op_node) {
+			push(&pst,node->tail);
+			push(&pst,node->head);
+		} else if(node->op == &op_push) {
+			putchar('(');
+			push(&pst,NULL); // come back and print a ')' later
+			push(&pst,node->head);
+		}
+		PRINT_CHAR(':',dup)
+		PRINT_CHAR('!',drop)
+		PRINT_CHAR('~',swap)
+		PRINT_CHAR('*',cat)
+		PRINT_CHAR('a',quote)
+		PRINT_CHAR('^',run)
 	}
-	PRINT_CHAR(':',dup)
-	PRINT_CHAR('!',drop)
-	PRINT_CHAR('~',swap)
-	PRINT_CHAR('*',cat)
-	PRINT_CHAR('a',quote)
-	PRINT_CHAR('^',run)
 }
 
 // vm control/cpu
