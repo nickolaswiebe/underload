@@ -44,9 +44,10 @@ The reason there are three different interpreters in three different languages e
 * translate Haskell program to Python
 * translate Python program to C
 * rewrite C program to avoid large chains of if statements
+* remove recursion from print
 
 *TODO:*
-* remove recursion from print, parse, and node_free; C doesn't have unlimited stack!
+* remove recursion from parse, and node_free; C doesn't have unlimited stack!
 * somehow implement `S` operator, maybe
 * become the fastest interpreter in the west
 * rewrite in assembly?
