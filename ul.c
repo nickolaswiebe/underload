@@ -86,7 +86,8 @@ void op_push() {
 	node_free(ip);
 }
 void op_node() {
-	push(&rs,node_dup(ip->tail));
+	if(ip->tail->op != &op_ret)
+		push(&rs,node_dup(ip->tail));
 	push(&rs,node_dup(ip->head));
 	node_free(ip);
 }
