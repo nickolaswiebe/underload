@@ -92,29 +92,28 @@ void op_node() {
 	node_free(ip);
 }
 void op_run() {
-	push(&rs,pop(&st));
+	struct node *t = st;
+	st = st->tail;
+	t->tail = rs;
+	rs = t;
 }
 void op_dup() {
-	struct node *t = pop(&st); // these two lines just get the top of the stack
-	push(&st,t);
-	push(&st,node_dup(t)); // this one actually does the work
+	push(&st,node_dup(st->head));
 }
 void op_drop() {
 	node_free(pop(&st));
 }
 void op_swap() {
-	struct node *b = pop(&st);
-	struct node *a = pop(&st);
-	push(&st,b);
-	push(&st,a);
+	struct node *t = st->head;
+	st->head = st->tail->head;
+	st->tail->head = t;
 }
 void op_cat() {
-	struct node *b = pop(&st); // have to write these as variables to get a sequence point
-	struct node *a = pop(&st);
-	push(&st,node_new(&op_node,a,b));
+	struct node *b = pop(&st);
+	st->head = node_new(&op_node,st->head,b);
 }
 void op_quote() {
-	push(&st,node_new(&op_push,pop(&st),NULL));
+	st->head = node_new(&op_push,st->head,NULL);
 }
 
 // output routine
