@@ -79,7 +79,7 @@ void move(struct node **dst,struct node **src) {
 	*src = (*src)->tail;
 	
 	top->tail = *dst; // relink it onto dst stack
-	*dst = t;
+	*dst = top;
 }
 
 // virtual machine state and operations
