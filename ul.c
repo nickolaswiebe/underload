@@ -73,6 +73,14 @@ struct node *pop(struct node **st) {
 	delete(old);
 	return ret;
 }
+// faster way of popping from one stack and pushing to another
+void move(struct node **dst,struct node **src) {
+	struct node *top = *src; // unlink top stack node
+	*src = (*src)->tail;
+	
+	top->tail = *dst; // relink it onto dst stack
+	*dst = top;
+}
 
 // virtual machine state and operations
 struct node *rs, *st, *ip; // internal state of the vm
@@ -80,40 +88,46 @@ struct node *rs, *st, *ip; // internal state of the vm
 // ip is the next instruction to be executed
 // all op_ functions represent vm operations
 void op_ret() {
+	ip = pop(&rs);
 }
 void op_push() {
 	push(&st,node_dup(ip->head));
 	node_free(ip);
+	ip = pop(&rs);
 }
 void op_node() {
-	push(&rs,node_dup(ip->tail));
-	push(&rs,node_dup(ip->head));
-	node_free(ip);
+	if(ip->tail->op != &op_ret)
+		push(&rs,node_dup(ip->tail));
+	
+	struct node *tofree = ip; // gotta free this node after we change the ip
+	ip = node_dup(ip->head); // dup it so the free below won't kill the current node
+	node_free(tofree);
 }
 void op_run() {
-	push(&rs,pop(&st));
+	ip = pop(&st);
 }
 void op_dup() {
-	struct node *t = pop(&st); // these two lines just get the top of the stack
-	push(&st,t);
-	push(&st,node_dup(t)); // this one actually does the work
+	push(&st,node_dup(st->head));
+	ip = pop(&rs);
 }
 void op_drop() {
 	node_free(pop(&st));
+	ip = pop(&rs);
 }
 void op_swap() {
-	struct node *b = pop(&st);
-	struct node *a = pop(&st);
-	push(&st,b);
-	push(&st,a);
+	struct node *t = st->head;
+	st->head = st->tail->head;
+	st->tail->head = t;
+	ip = pop(&rs);
 }
 void op_cat() {
-	struct node *b = pop(&st); // have to write these as variables to get a sequence point
-	struct node *a = pop(&st);
-	push(&st,node_new(&op_node,a,b));
+	struct node *b = pop(&st);
+	st->head = node_new(&op_node,st->head,b);
+	ip = pop(&rs);
 }
 void op_quote() {
-	push(&st,node_new(&op_push,pop(&st),NULL));
+	st->head = node_new(&op_push,st->head,NULL);
+	ip = pop(&rs);
 }
 
 // output routine
@@ -152,7 +166,7 @@ void done() { // technically should be an op_ function, but it's kinds special
 	// reverse the stack by pushing it onto a temp stack
 	struct node *rev = NULL;
 	while(st != NULL) // st == NULL when st is empty
-		push(&rev,pop(&st));
+		move(&rev,&st);
 	
 	// print each stack item with it's implicit brackets
 	while(rev != NULL) {
@@ -170,12 +184,10 @@ void vm(struct node *prog) { // the vm entry point
 	
 	// special done() func on rs represents end of program
 	push(&rs,node_new(&done,NULL,NULL));
-	push(&rs,prog);
+	ip = prog;
 	
-	for(;;) { // don't worry about stopping the execution loop, done() does that!
-		ip = pop(&rs);
+	for(;;) // don't worry about stopping the execution loop, done() does that!
 		ip->op();
-	}
 }
 
 // parsing
