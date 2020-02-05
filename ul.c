@@ -88,37 +88,46 @@ struct node *rs, *st, *ip; // internal state of the vm
 // ip is the next instruction to be executed
 // all op_ functions represent vm operations
 void op_ret() {
+	ip = pop(&rs);
 }
 void op_push() {
 	push(&st,node_dup(ip->head));
 	node_free(ip);
+	ip = pop(&rs);
 }
 void op_node() {
 	if(ip->tail->op != &op_ret)
 		push(&rs,node_dup(ip->tail));
-	push(&rs,node_dup(ip->head));
-	node_free(ip);
+	
+	struct node *tofree = ip; // gotta free this node after we change the ip
+	ip = node_dup(ip->head); // dup it so the free below won't kill the current node
+	node_free(tofree);
 }
 void op_run() {
-	move(&rs,&st);
+	ip = pop(&st);
 }
 void op_dup() {
 	push(&st,node_dup(st->head));
+	ip = pop(&rs);
 }
 void op_drop() {
 	node_free(pop(&st));
+	ip = pop(&rs);
 }
 void op_swap() {
 	struct node *t = st->head;
 	st->head = st->tail->head;
 	st->tail->head = t;
+	ip = pop(&rs);
 }
 void op_cat() {
 	struct node *b = pop(&st);
 	st->head = node_new(&op_node,st->head,b);
+	ip = pop(&rs);
 }
 void op_quote() {
 	st->head = node_new(&op_push,st->head,NULL);
+	ip = pop(&rs);
 }
 
 // output routine
@@ -175,12 +184,10 @@ void vm(struct node *prog) { // the vm entry point
 	
 	// special done() func on rs represents end of program
 	push(&rs,node_new(&done,NULL,NULL));
-	push(&rs,prog);
+	ip = prog;
 	
-	for(;;) { // don't worry about stopping the execution loop, done() does that!
-		ip = pop(&rs);
+	for(;;) // don't worry about stopping the execution loop, done() does that!
 		ip->op();
-	}
 }
 
 // parsing
