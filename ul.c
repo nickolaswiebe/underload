@@ -73,6 +73,14 @@ struct node *pop(struct node **st) {
 	delete(old);
 	return ret;
 }
+// faster way of popping from one stack and pushing to another
+void move(struct node **dst,struct node **src) {
+	struct node *top = *src; // unlink top stack node
+	*src = (*src)->tail;
+	
+	top->tail = *dst; // relink it onto dst stack
+	*dst = t;
+}
 
 // virtual machine state and operations
 struct node *rs, *st, *ip; // internal state of the vm
@@ -92,10 +100,7 @@ void op_node() {
 	node_free(ip);
 }
 void op_run() {
-	struct node *t = st;
-	st = st->tail;
-	t->tail = rs;
-	rs = t;
+	move(&rs,&st);
 }
 void op_dup() {
 	push(&st,node_dup(st->head));
@@ -151,12 +156,8 @@ void print(struct node *node) {
 void done() { // technically should be an op_ function, but it's kinds special
 	// reverse the stack by pushing it onto a temp stack
 	struct node *rev = NULL;
-	while(st != NULL) { // st == NULL when st is empty
-		struct node *t = st; // fast pop from st onto rev
-		st = st->tail;
-		t->tail = rev;
-		rev = t;
-	}
+	while(st != NULL) // st == NULL when st is empty
+		move(&rev,&st);
 	
 	// print each stack item with it's implicit brackets
 	while(rev != NULL) {
