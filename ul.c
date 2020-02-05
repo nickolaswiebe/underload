@@ -151,8 +151,12 @@ void print(struct node *node) {
 void done() { // technically should be an op_ function, but it's kinds special
 	// reverse the stack by pushing it onto a temp stack
 	struct node *rev = NULL;
-	while(st != NULL) // st == NULL when st is empty
-		push(&rev,pop(&st));
+	while(st != NULL) { // st == NULL when st is empty
+		struct node *t = st; // fast pop from st onto rev
+		st = st->tail;
+		t->tail = rev;
+		rev = t;
+	}
 	
 	// print each stack item with it's implicit brackets
 	while(rev != NULL) {
