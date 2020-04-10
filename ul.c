@@ -196,9 +196,12 @@ void vm(struct node *prog) { // the vm entry point
 // PARSE_CHAR('c',func) means that 'c' should be parsed to a node containing func
 #define PARSE_CHAR(C,F) case C: inner = node_new(&op_##F,NULL,NULL); PARSE_UPDATE() break;
 struct node *parse() {
-	struct node *layer = NULL;
+	struct node *pst = NULL;
+	struct node *layer;
 	struct node *inner;
 	char c;
+	recurse:
+	layer = NULL;
 	while((c = getchar()) != EOF && c != ')') {
 		switch(c) {
 			PARSE_CHAR(':',dup)
@@ -208,7 +211,11 @@ struct node *parse() {
 			PARSE_CHAR('a',quote)
 			PARSE_CHAR('^',run)
 			case '(':
-				inner = parse();
+				push(&pst,layer);
+				goto recurse;
+				unrecurse:
+				inner = layer;
+				layer = pop(&pst);
 				inner = node_new(&op_push,inner,NULL);
 				PARSE_UPDATE()
 			break;
@@ -216,6 +223,8 @@ struct node *parse() {
 	}
 	inner = node_new(&op_ret,NULL,NULL);
 	PARSE_UPDATE()
+	if(pst != NULL)
+		goto unrecurse;
 	return layer;
 }
 
