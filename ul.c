@@ -200,10 +200,9 @@ struct node *parse() {
 	struct node *layer;
 	struct node *inner;
 	char c;
-	recurse:
 	layer = NULL;
-	while((c = getchar()) != EOF && c != ')') {
-		switch(c) {
+	for(;;) {
+		switch(c = getchar()) {
 			PARSE_CHAR(':',dup)
 			PARSE_CHAR('!',drop)
 			PARSE_CHAR('~',swap)
@@ -212,20 +211,31 @@ struct node *parse() {
 			PARSE_CHAR('^',run)
 			case '(':
 				push(&pst,layer);
-				goto recurse;
-				unrecurse:
+				layer = NULL;
+			break;
+			case ')':
+				inner = node_new(&op_ret,NULL,NULL);
+				PARSE_UPDATE()
+				
+				if(pst == NULL) // stack shouldn't be empty, we're not done
+					exit(-1);
+				
 				inner = layer;
 				layer = pop(&pst);
 				inner = node_new(&op_push,inner,NULL);
 				PARSE_UPDATE()
 			break;
+			case EOF:
+				inner = node_new(&op_ret,NULL,NULL);
+				PARSE_UPDATE()
+				
+				if(pst != NULL) // stack should be empty after parsing is done
+					exit(-1);
+				
+				return layer;
+			break;
 		}
 	}
-	inner = node_new(&op_ret,NULL,NULL);
-	PARSE_UPDATE()
-	if(pst != NULL)
-		goto unrecurse;
-	return layer;
 }
 
 int main() {
