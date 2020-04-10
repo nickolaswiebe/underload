@@ -191,27 +191,32 @@ void vm(struct node *prog) { // the vm entry point
 }
 
 // parsing
+// PARSE_UPDATE() adds inner to the current layer
+#define PARSE_UPDATE() layer = layer == NULL ? inner : node_new(&op_node,layer,inner);
 // PARSE_CHAR('c',func) means that 'c' should be parsed to a node containing func
-#define PARSE_CHAR(C,F) \
-	case C: \
-		return node_new(&op_node,node_new(&op_##F,NULL,NULL),parse());
+#define PARSE_CHAR(C,F) case C: inner = node_new(&op_##F,NULL,NULL); PARSE_UPDATE() break;
 struct node *parse() {
-	switch(getchar()) {
-		case '(': ; // use a blank ; to shut up the compiler
-			struct node *inner = parse(); // ensure order of evaluation
-			return node_new(&op_node,node_new(&op_push,inner,NULL),parse());
-		case ')':
-		case EOF:
-			return node_new(&op_ret,NULL,NULL);
-		PARSE_CHAR(':',dup)
-		PARSE_CHAR('!',drop)
-		PARSE_CHAR('~',swap)
-		PARSE_CHAR('*',cat)
-		PARSE_CHAR('a',quote)
-		PARSE_CHAR('^',run)
-		default:
-			return parse();
+	struct node *layer = NULL;
+	struct node *inner;
+	char c;
+	while((c = getchar()) != EOF && c != ')') {
+		switch(c) {
+			PARSE_CHAR(':',dup)
+			PARSE_CHAR('!',drop)
+			PARSE_CHAR('~',swap)
+			PARSE_CHAR('*',cat)
+			PARSE_CHAR('a',quote)
+			PARSE_CHAR('^',run)
+			case '(':
+				inner = parse();
+				inner = node_new(&op_push,inner,NULL);
+				PARSE_UPDATE()
+			break;
+		}
 	}
+	inner = node_new(&op_ret,NULL,NULL);
+	PARSE_UPDATE()
+	return layer;
 }
 
 int main() {
