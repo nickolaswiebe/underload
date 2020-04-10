@@ -191,27 +191,66 @@ void vm(struct node *prog) { // the vm entry point
 }
 
 // parsing
-// PARSE_CHAR('c',func) means that 'c' should be parsed to a node containing func
+
+// adds inner to the current layer, handling the edge case
+#define PARSE_UPDATE() \
+	if(layer == NULL) \
+		layer = inner; \
+	else \
+		layer = node_new(&op_node,layer,inner);
+
+// means that C should be parsed to a node containing func F
 #define PARSE_CHAR(C,F) \
 	case C: \
-		return node_new(&op_node,node_new(&op_##F,NULL,NULL),parse());
+		inner = node_new(&op_##F,NULL,NULL); \
+		PARSE_UPDATE(); \
+	break;
+
 struct node *parse() {
-	switch(getchar()) {
-		case '(': ; // use a blank ; to shut up the compiler
-			struct node *inner = parse(); // ensure order of evaluation
-			return node_new(&op_node,node_new(&op_push,inner,NULL),parse());
-		case ')':
-		case EOF:
-			return node_new(&op_ret,NULL,NULL);
-		PARSE_CHAR(':',dup)
-		PARSE_CHAR('!',drop)
-		PARSE_CHAR('~',swap)
-		PARSE_CHAR('*',cat)
-		PARSE_CHAR('a',quote)
-		PARSE_CHAR('^',run)
-		default:
-			return parse();
-	}
+	struct node *st = NULL; // stack of unclosed () quotes
+	struct node *layer = NULL; // the current 'layer' of the program being parsed,
+	// everything in here has fixed depth in the syntax tree
+	struct node *inner; // the new section just parsed, to be added to the current layer
+	char c;
+	
+	for(;;)
+		switch(c = getchar()) {
+			// handle basic operations
+			PARSE_CHAR(':',dup)
+			PARSE_CHAR('!',drop)
+			PARSE_CHAR('~',swap)
+			PARSE_CHAR('*',cat)
+			PARSE_CHAR('a',quote)
+			PARSE_CHAR('^',run)
+			
+			case '(':
+				push(&st,layer); // save state of layer
+				layer = NULL; // start new layer
+			break;
+			case ')':
+				// add return operation
+				inner = node_new(&op_ret,NULL,NULL);
+				PARSE_UPDATE();
+				
+				if(st == NULL) // stack shouldn't be empty, we're not done
+					exit(-1);
+				
+				inner = layer; // 'return' from inner expression
+				layer = pop(&st); // restore layer
+				inner = node_new(&op_push,inner,NULL);
+				PARSE_UPDATE();
+			break;
+			case EOF:
+				// add return operation
+				inner = node_new(&op_ret,NULL,NULL);
+				PARSE_UPDATE();
+				
+				if(st != NULL) // stack should be empty after parsing is done
+					exit(-1);
+				
+				return layer;
+			break;
+		}
 }
 
 int main() {
