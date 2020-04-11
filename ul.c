@@ -39,7 +39,7 @@ void delete(struct node *node) {
 	free_list = node;
 }
 
-// garbage collector
+// node creation helper function
 struct node *node_new(func *op,struct node *head,struct node *tail) {
 	struct node *node = new();
 	node->op = op;
@@ -47,18 +47,6 @@ struct node *node_new(func *op,struct node *head,struct node *tail) {
 	node->tail = tail;
 	node->refs = 1; // wherever this node gets stored, it'll have 1 ref
 	return node;
-}
-void node_free(struct node *node) {
-	if(node == NULL || --node->refs > 0)
-		return;
-	
-	node_free(node->head);
-	node_free(node->tail);
-	delete(node);
-}
-struct node *node_dup(struct node *node) {
-	node->refs++; // 1 more variable references it
-	return node; // sharing woo
 }
 
 // generic stack operations
@@ -80,6 +68,24 @@ void move(struct node **dst,struct node **src) {
 	
 	top->tail = *dst; // relink it onto dst stack
 	*dst = top;
+}
+
+// garbage collection
+void node_free(struct node *node) {
+	struct node *st = NULL;
+	
+	push(&st,node);
+	while(st != NULL) {
+		node = pop(&st);
+		if(node == NULL || --node->refs > 0) continue;
+		push(&st,node->head);
+		push(&st,node->tail);
+		delete(node);
+	}
+}
+struct node *node_dup(struct node *node) {
+	node->refs++; // 1 more variable references it
+	return node; // sharing woo
 }
 
 // virtual machine state and operations
